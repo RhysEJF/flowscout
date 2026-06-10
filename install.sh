@@ -25,9 +25,13 @@ echo ""
 # Step 1: create directories
 mkdir -p .claude/commands
 mkdir -p skills
+mkdir -p scripts
 mkdir -p memory/knowledge-sources/papers
 mkdir -p experiences/citation-walk
 mkdir -p experiences/theses
+mkdir -p experiences/research-cycle
+mkdir -p experiences/flow-frontier
+mkdir -p experiences/verify-thesis
 
 # Step 2: fetch FlowScout to a temp directory
 TMPDIR=$(mktemp -d)
@@ -65,9 +69,35 @@ for skill in digest-paper citation-walk research-cycle flow-frontier verify-thes
   fi
 done
 
-# Step 5: prerequisites check
+# Step 5: install helper scripts
+echo ""
+echo "Installing helper scripts..."
+for script in with-lock.py papers-server.py research-cycle-helpers.py; do
+  src="$TMPDIR/flowscout/scripts/$script"
+  dst="scripts/$script"
+  if [[ -f "$dst" && "$FORCE" != true ]]; then
+    echo "  - scripts/$script already exists (use --force to overwrite)"
+  else
+    cp "$src" "$dst"
+    chmod +x "$dst"
+    echo "  + scripts/$script"
+  fi
+done
+
+# Step 6: prerequisites check
 echo ""
 echo "Checking prerequisites..."
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "  ! python3 not found. The helper scripts (locking, viewer server, /research-cycle bookkeeping) need it."
+else
+  echo "  + python3 found"
+  if python3 -c "import yaml" >/dev/null 2>&1; then
+    echo "  + PyYAML installed"
+  else
+    echo "  ! PyYAML not installed. /research-cycle needs it: pip3 install pyyaml"
+  fi
+fi
+
 if [[ -z "${EXA_API_KEY:-}" ]]; then
   echo "  ! EXA_API_KEY not set. /citation-walk --orbit and /verify-thesis will be limited."
   echo "    Get a key at https://exa.ai then: export EXA_API_KEY=..."

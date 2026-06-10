@@ -5,7 +5,7 @@ description: Layer 2 of the Flow Frontier research engine. Takes an open thesis 
 
 # /verify-thesis — Falsifiable-claim verifier
 
-> Layer 2 of the Flow Frontier research engine. Architecture plan: `experiences/plans/flow-frontier-architecture.md`.
+> Layer 2 of the Flow Frontier research engine.
 
 ## When to Use
 

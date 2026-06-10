@@ -235,7 +235,7 @@ for url, slug_guess in picked_papers:
     Agent(
       subagent_type="general-purpose",
       description=f"Digest {slug_guess}",
-      prompt=f"Execute /digest-paper at /Users/.../skills/digest-paper/SKILL.md on:\n"
+      prompt=f"Execute /digest-paper per skills/digest-paper/SKILL.md (read it in full) on:\n"
              f"  URL: {url}\n"
              f"  Lens: --lens={lens}\n\n"
              f"YOU ARE A TOP-LEVEL SUB-AGENT invoked by /research-cycle orchestrator.\n"
@@ -410,7 +410,7 @@ Next-cycle recommendation:
     "seed": "adler-2026-storage-not-memory",
     "digested": ["...", "..."]
   },
-  "phase5_meta_digest_path": "experiences/research-cycle/cycle-3-ai-agent-memory-architecture-and-retrieval-2026-05-20/cycle-digest.md",
+  "phase5_meta_digest_path": "experiences/research-cycle/cycle-3-<topic-slug>-<date>/cycle-digest.md",
   "papers_added_this_cycle": 27,
   "carry_over_for_next_cycle": [
     {"title": "...", "score": 0.82, "from_phase": "broad", "source_url": "https://..."}

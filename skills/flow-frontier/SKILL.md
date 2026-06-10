@@ -5,7 +5,7 @@ description: Mine cross-paper insights from the papers wiki across five gap-type
 
 # /flow-frontier — Cross-paper thesis miner
 
-> Layer 1 of the Flow Frontier research engine. Reads a topic cluster of paper digests, runs parallel gap-type sub-agents, emits falsifiable theses to `experiences/theses/`. Architecture plan: `experiences/plans/flow-frontier-architecture.md`.
+> Layer 1 of the Flow Frontier research engine. Reads a topic cluster of paper digests, runs parallel gap-type sub-agents, emits falsifiable theses to `experiences/theses/`.
 
 ## When to Use
 

@@ -52,6 +52,7 @@ curl -sSL https://raw.githubusercontent.com/RhysEJF/flowscout/main/install.sh | 
 git clone https://github.com/RhysEJF/flowscout.git /tmp/flowscout
 cp /tmp/flowscout/commands/*.md  ./.claude/commands/
 cp -R /tmp/flowscout/skills/*    ./skills/
+mkdir -p ./scripts && cp /tmp/flowscout/scripts/*.py ./scripts/
 ```
 
 ## Usage
@@ -95,13 +96,20 @@ Once installed, all five commands are available as Claude Code slash commands.
 
 ## Browsing your corpus
 
-FlowScout ships with a lightweight HTML viewer (`skills/digest-paper/viewer-template.html`) that auto-installs to `memory/knowledge-sources/papers/viewer.html` the first time you run `/digest-paper`. Open it in a browser to scroll your digests, search them, and click through to the markdown source. It is a single self-contained file. No server, no build step, no dependencies.
+FlowScout ships with a lightweight HTML viewer (`skills/digest-paper/viewer-template.html`) that auto-installs to `memory/knowledge-sources/papers/viewer.html` the first time you run `/digest-paper`. Open it in a browser to scroll your digests, search them, and click through to the markdown source. It is a single self-contained file with no build step.
+
+For basic browsing, any static file server works (`python3 -m http.server 8000` from the papers directory). To also get the viewer's annotation feature (highlight text in a digest, attach a note — stored as plain markdown sidecars QMD and Obsidian can read) and the theses tab, run the bundled server instead:
+
+```bash
+python3 scripts/papers-server.py   # then open http://localhost:8000/viewer.html
+```
 
 **Obsidian, Logseq, or similar users**: point your vault at `memory/knowledge-sources/papers/` and you can ignore the viewer entirely. The digests are plain markdown with YAML frontmatter, so your existing tooling will pick them up. The bundled viewer exists because I had not adopted Obsidian when I built this and wanted something quick I could read in the browser. Might build a richer one on top of it later.
 
 ## Prerequisites
 
 - **[Claude Code](https://claude.com/claude-code)** installed (CLI or IDE extension)
+- **python3** for the bundled helper scripts in `scripts/` (cross-sub-agent locking, the viewer server, `/research-cycle` bookkeeping). `/research-cycle` additionally needs PyYAML: `pip3 install pyyaml`
 - **An Exa API key** for orbit mode and verify-thesis (set as `EXA_API_KEY` in your shell, or via the [Exa MCP](https://github.com/exa-labs/exa-mcp-server))
 - **A second brain with these conventions**:
     - `memory/knowledge-sources/papers/` for paper digests
@@ -137,7 +145,7 @@ FlowScout is alpha. Things on the list:
 - [ ] Path config: a single `flowscout.toml` to override `memory/knowledge-sources/papers/` etc.
 - [ ] Second-brain adapters (Obsidian, Logseq, Notion export folders)
 - [ ] Built-in scheduling without needing `/loop`
-- [ ] A richer viewer (annotations, tags, full-text search across digests) on top of the bundled HTML one
+- [ ] A richer viewer (tags, full-text search across digests) on top of the bundled HTML one
 - [ ] LaTeX-to-figure extractor for arxiv source tarballs (current version uses PDF screenshots)
 
 PRs welcome. Issues even more welcome.

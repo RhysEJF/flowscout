@@ -15,14 +15,18 @@ fi
 
 ## Step 1: Check for required directories
 
-FlowScout writes to three directories. Create them if they don't exist.
+Create FlowScout's directories if they don't exist.
 
 ```bash
 mkdir -p .claude/commands
 mkdir -p skills
+mkdir -p scripts
 mkdir -p memory/knowledge-sources/papers
 mkdir -p experiences/citation-walk
 mkdir -p experiences/theses
+mkdir -p experiences/research-cycle
+mkdir -p experiences/flow-frontier
+mkdir -p experiences/verify-thesis
 ```
 
 ## Step 2: Fetch FlowScout
@@ -64,11 +68,34 @@ for skill in digest-paper citation-walk research-cycle flow-frontier verify-thes
 done
 ```
 
-## Step 5: Verify prerequisites
+## Step 5: Install the helper scripts
+
+Copy the three Python helper scripts into `scripts/`. They are required: `with-lock.py` serializes concurrent INDEX/QMD writes across sub-agents, `papers-server.py` backs the viewer's notes + theses features, and `research-cycle-helpers.py` does the `/research-cycle` orchestrator's bookkeeping.
+
+```bash
+for script in with-lock.py papers-server.py research-cycle-helpers.py; do
+  if [ -f "scripts/$script" ]; then
+    echo "Already exists: scripts/$script (skipping; remove first to reinstall)"
+  else
+    cp "$TMPDIR/flowscout/scripts/$script" "scripts/"
+    chmod +x "scripts/$script"
+    echo "Installed: scripts/$script"
+  fi
+done
+```
+
+## Step 6: Verify prerequisites
 
 Check whether the user has the prerequisites set up. Print warnings, don't fail.
 
 ```bash
+# python3 + PyYAML (helper scripts; PyYAML is only needed by /research-cycle)
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "WARN: python3 not found. The helper scripts in scripts/ need it."
+elif ! python3 -c "import yaml" >/dev/null 2>&1; then
+  echo "WARN: PyYAML not installed. /research-cycle needs it: pip3 install pyyaml"
+fi
+
 # Exa API key (needed for orbit mode + verify-thesis)
 if [ -z "$EXA_API_KEY" ]; then
   echo "WARN: EXA_API_KEY not set. /citation-walk --orbit and /verify-thesis will be limited."
@@ -82,7 +109,7 @@ if ! command -v ./vendor/qmd/bin/qmd >/dev/null 2>&1; then
 fi
 ```
 
-## Step 6: Clean up and report
+## Step 7: Clean up and report
 
 ```bash
 rm -rf "$TMPDIR"
@@ -116,6 +143,7 @@ rm .claude/commands/research-cycle.md
 rm .claude/commands/flow-frontier.md
 rm .claude/commands/verify-thesis.md
 rm -rf skills/digest-paper skills/citation-walk skills/research-cycle skills/flow-frontier skills/verify-thesis
+rm -f scripts/with-lock.py scripts/papers-server.py scripts/research-cycle-helpers.py
 ```
 
 Note: this does not delete the corpus you've built (`memory/knowledge-sources/papers/`, `experiences/theses/`, etc.). Those are your data; keep them.

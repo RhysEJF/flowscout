@@ -26,6 +26,4 @@ The full skill methodology lives at `skills/verify-thesis/SKILL.md`. Read that f
 - Updated `experiences/theses/<slug>.md` files: frontmatter (`status`, `verified_date`, `verdict`, `verdict_evidence`, `contradicting_papers`), populated `## Contradicting papers` and `## Verification notes` body sections, optional `## Experiment design` section.
 - `experiences/verify-thesis/<run-id>/state.json` — full run state.
 
-**Architecture plan:** `experiences/plans/flow-frontier-architecture.md`
-
 Modes are mutually exclusive — reject invocations with more than one of `<slug>` / `--all-open` / `--status`. If none, list open theses and ask the user to pick.

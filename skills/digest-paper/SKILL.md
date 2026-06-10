@@ -262,7 +262,7 @@ Notes and highlights on [[<slug>]].
 _No notes yet. Highlight text in the digest to add one._
 ```
 
-The `papers-server.py` server appends/removes note blocks in this file as the user annotates in the viewer. QMD indexes it like any other markdown file, and `/learn` skips it on the `kind: paper-notes` discriminator.
+The bundled `scripts/papers-server.py` server appends/removes note blocks in this file as the user annotates in the viewer. QMD indexes it like any other markdown file, and session-memory extractors (like Flow OS's `/learn`) skip it on the `kind: paper-notes` discriminator.
 
 ### Step 7 — Hallucination check (sequential)
 
@@ -349,7 +349,7 @@ Tell the user:
 - Reviewer severity (if not Clean, call it out)
 - Number of related digests linked
 - Number of citations extracted (this is the auto-research hook — future `/auto-research` skill will walk these)
-- How to browse: open `memory/knowledge-sources/papers/viewer.html` in a browser (run `python3 -m http.server 8000` in that directory if file:// fetch is blocked)
+- How to browse: run `python3 scripts/papers-server.py` and open `http://localhost:8000/viewer.html` (enables the annotation + theses features; plain `python3 -m http.server 8000` from the papers directory also works for read-only browsing)
 - Suggest next actions: `/digest-paper <next-url>` to grow the wiki, or `qmd query "..."` to search across all digested papers
 
 ## Paper frontmatter schema
@@ -402,7 +402,7 @@ best_figure:                           # extracted in Step 5.5; null if no PDF o
 ```
 
 **Why this schema** (and why it's not the v2 memory schema):
-- `kind: paper-digest` distinguishes these files from `/learn`-extracted session memories — `/learn` checks for this and skips them
+- `kind: paper-digest` distinguishes these files from extracted session memories — session-memory extractors (like Flow OS's `/learn`) check for this and skip them
 - `topics`, `tags`, `entities` use the same field names as v2 so QMD's existing tag/entity search works across both
 - Wiki-link `[[slug]]` references in body activate QMD's WikiWord cross-referencing
 
@@ -411,7 +411,7 @@ best_figure:                           # extracted in Step 5.5; null if no PDF o
 - **Run all 8 main analyses in parallel** (single message, 8 Agent calls). Sequential chaining was a legacy workaround for old context limits and is dramatically slower with no quality benefit on modern models.
 - **Never invent connections to fields the paper doesn't address.** If the lens asks for "implications for X" and the paper genuinely has none, say so — don't manufacture takeaways.
 - **The hallucination check runs AFTER the digest is drafted** and edits it in place. Don't skip it — it's the only thing standing between you and shipping a wrong fact into your wiki.
-- **The `kind: paper-digest` frontmatter field is load-bearing.** It prevents `/learn` from trying to re-extract these as session memories.
+- **The `kind: paper-digest` frontmatter field is load-bearing.** It prevents session-memory extractors (like Flow OS's `/learn`) from trying to re-extract these as session memories.
 - **Always run `qmd update` + `qmd embed` at the end.** Without it, the new digest is invisible to next session's search.
 - **One paper per run.** Don't batch multiple URLs in one invocation — each gets its own slug, frontmatter, and QMD pass.
 - **Figure extraction requires `pdftoppm`** (from poppler-utils). If unavailable, the digest still ships — just without an embedded figure image. Don't fail the run over a missing figure.

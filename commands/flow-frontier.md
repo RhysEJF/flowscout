@@ -32,8 +32,6 @@ The full skill methodology lives at `skills/flow-frontier/SKILL.md`. Read that f
 - `experiences/theses/INDEX.md` — appended rows
 - `experiences/theses/_manifest.json` — cluster tracking + reverse map (papers → theses)
 
-**Architecture plan:** `experiences/plans/flow-frontier-architecture.md`
-
 Modes are mutually exclusive — reject invocations with more than one of `--topic` / `--slugs` / `--refresh`.
 
 If the user did not pass any of the three required mode flags, ask which they want: a fresh topic search, an explicit slug set, or a refresh of existing clusters.
