@@ -145,7 +145,7 @@ Do NOT modify the original claim, falsification design, or supporting-papers sec
 ### Step 8 — Update INDEX.md + manifest
 
 For each verified thesis:
-1. Update `experiences/theses/INDEX.md`: replace the status chip in the thesis's row (🟢 open → 🔵 verified / 🔴 falsified / 🟡 partial / 🟢 still open).
+1. Update `experiences/theses/<corpus>/INDEX.md`: replace the status chip in the thesis's row (🟢 open → 🔵 verified / 🔴 falsified / 🟡 partial / 🟢 still open).
 2. No manifest changes needed — verification doesn't alter cluster membership.
 
 ### Step 9 — Refresh QMD
@@ -214,7 +214,7 @@ After running, confirm:
 - [ ] `experiences/verify-thesis/<run-id>/state.json` has `status: "completed"`
 - [ ] Every processed thesis has updated `status` + `verified_date` frontmatter
 - [ ] Every processed thesis has populated `## Contradicting papers` and `## Verification notes` body sections (not the placeholder text)
-- [ ] `experiences/theses/INDEX.md` rows show the new status chips
+- [ ] `experiences/theses/<corpus>/INDEX.md` rows show the new status chips
 - [ ] `qmd search "<thesis-title-fragment>"` returns the updated digest
 
 ## Forward compatibility

@@ -31,7 +31,7 @@ The full skill methodology lives at `skills/flow-frontier/SKILL.md`. Read that f
 **Outputs:**
 - `experiences/theses/<corpus>/<slug>.md` — one file per new thesis, with frontmatter + falsification section
 - `experiences/theses/<corpus>/INDEX.md` — appended rows
-- `experiences/theses/_manifest.json` — cluster tracking + reverse map (papers → theses)
+- `experiences/theses/<corpus>/_manifest.json` — cluster tracking + reverse map (papers → theses)
 
 Modes are mutually exclusive — reject invocations with more than one of `--topic` / `--slugs` / `--refresh`.
 

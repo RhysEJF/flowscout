@@ -92,16 +92,16 @@ Filter out `-notes.md`, `INDEX.md`, anything not a digest. If fewer than 5 paper
 Split on commas. Validate each slug has `memory/knowledge-sources/papers/<corpus>/<slug>.md`. Error on the first missing.
 
 **`--refresh`:**
-Load `experiences/theses/_manifest.json`. For each cluster, re-resolve its current paper-set via the saved `topic_query`. Compute current `papers_sha = sha256(sorted(papers).join("\n"))`. Compare to manifest's stored `papers_sha`. If unchanged and `--force` not set: skip this cluster. If changed: queue it for re-run.
+Load `experiences/theses/<corpus>/_manifest.json`. For each cluster, re-resolve its current paper-set via the saved `topic_query`. Compute current `papers_sha = sha256(sorted(papers).join("\n"))`. Compare to manifest's stored `papers_sha`. If unchanged and `--force` not set: skip this cluster. If changed: queue it for re-run.
 
 **`--merge-clusters=a,b,c`:** *(v2)*
-Load `experiences/theses/_manifest.json`. Validate that each named cluster exists; error on first missing. Take the union of their `papers` arrays (preserving uniqueness). This becomes the new cluster's paper-set. Cluster name defaults to `merge-<sha1(sorted(source-cluster-names))[:8]>` unless `--cluster-name` is supplied. The source clusters are NOT modified — the merge cluster lives alongside them in the manifest. Skip the overlap-detection step (Step 3.5) for this mode since high overlap is intentional.
+Load `experiences/theses/<corpus>/_manifest.json`. Validate that each named cluster exists; error on first missing. Take the union of their `papers` arrays (preserving uniqueness). This becomes the new cluster's paper-set. Cluster name defaults to `merge-<sha1(sorted(source-cluster-names))[:8]>` unless `--cluster-name` is supplied. The source clusters are NOT modified — the merge cluster lives alongside them in the manifest. Skip the overlap-detection step (Step 3.5) for this mode since high overlap is intentional.
 
 ### Step 3 — Check manifest for delta
 
 Skip this step for `--refresh` mode (already done in Step 2). For `--topic` / `--slugs` / `--merge-clusters`:
 
-1. Load `experiences/theses/_manifest.json` (create empty if missing).
+1. Load `experiences/theses/<corpus>/_manifest.json` (create empty if missing).
 2. Look up `clusters[cluster_name]`.
 3. If absent: this is a fresh cluster. `new_papers = cluster`. Proceed (and run Step 3.5 unless `--merge-clusters`).
 4. If present: compute current `papers_sha`. Compare to manifest. If unchanged and not `--force`: exit cleanly with "Cluster unchanged since `<last_run>`; nothing to do."
@@ -177,8 +177,8 @@ For each emitted thesis:
 
 1. Generate slug from title (kebab, first ~6 content words after stopword strip).
 2. Write `experiences/theses/<slug>.md` using the schema below.
-3. Append row to `experiences/theses/INDEX.md` (create if missing — see template below).
-4. Update `experiences/theses/_manifest.json`:
+3. Append row to `experiences/theses/<corpus>/INDEX.md` (create if missing — see template below).
+4. Update `experiences/theses/<corpus>/_manifest.json`:
    ```json
    {
      "version": 1,
@@ -296,7 +296,7 @@ related_theses: []
 
 ## INDEX.md template (for theses)
 
-`experiences/theses/INDEX.md`:
+`experiences/theses/<corpus>/INDEX.md`:
 
 ```markdown
 # Theses Wiki
@@ -333,7 +333,7 @@ When the user passes `--gap-types`, only the named agents run. The orchestrator 
 
 ## Manifest schema
 
-`experiences/theses/_manifest.json`:
+`experiences/theses/<corpus>/_manifest.json`:
 
 ```json
 {
@@ -400,8 +400,8 @@ When the user passes `--gap-types`, only the named agents run. The orchestrator 
 After running, confirm:
 - [ ] `experiences/flow-frontier/<run-dir>/state.json` has `status: "completed"`
 - [ ] Every slug in `state.emitted_theses` corresponds to a file at `experiences/theses/<slug>.md`
-- [ ] `experiences/theses/INDEX.md` has a new row per emitted thesis
-- [ ] `experiences/theses/_manifest.json` has the cluster updated and reverse-map entries added
+- [ ] `experiences/theses/<corpus>/INDEX.md` has a new row per emitted thesis
+- [ ] `experiences/theses/<corpus>/_manifest.json` has the cluster updated and reverse-map entries added
 - [ ] `qmd search "<thesis-title-fragment>"` returns the new thesis
 - [ ] Stale theses (if any) have updated frontmatter only (body untouched)
 
@@ -414,9 +414,9 @@ After running, confirm:
 
 ## Viewer changes (v1.5 — not required for v1)
 
-When the user is ready, the papers viewer at `memory/knowledge-sources/papers/viewer.html` should be extended:
+When the user is ready, the papers viewer at `memory/knowledge-sources/papers/<corpus>/viewer.html` should be extended:
 
-1. **Sidebar — Theses tab.** A second tab next to "Papers." Lists all theses from `experiences/theses/INDEX.md`. Status chips (🟢 open · 🔵 verified · 🔴 falsified · ⚠️ stale).
+1. **Sidebar — Theses tab.** A second tab next to "Papers." Lists all theses from `experiences/theses/<corpus>/INDEX.md`. Status chips (🟢 open · 🔵 verified · 🔴 falsified · ⚠️ stale).
 2. **Per-paper footer — "Theses involving this paper".** On each paper digest page, after the body, add a section listing all theses where this paper appears in `generated_from`. Lookup via `_manifest.json`'s `theses_by_paper` (fetched once on viewer load).
 3. **Per-thesis detail page.** Custom layout for `kind: thesis` files: prominent claim, falsification section as a callout, supporting/contradicting papers as link chips, verification notes inline.
 
