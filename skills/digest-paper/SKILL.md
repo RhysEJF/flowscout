@@ -18,12 +18,32 @@ description: Given a URL to a scientific paper (arxiv/PDF/HTML), produce a struc
 | Flag | Meaning |
 |---|---|
 | `<url>` (required) | arxiv.org / openreview / direct .pdf / any web page hosting the paper |
+| `--corpus=<slug>` | Which research corpus this digest belongs to (see Step 0) |
 | `--lens=<slug>` | Use an existing lens file at `skills/digest-paper/lenses/<slug>.md` |
 | `--lens` (no value) | List all available lenses and ask user to pick |
 | `--new-lens` | Interview user to define a new lens, save it, then use it |
 | (no lens flag) | Default to `generic` lens |
 
 ## Methodology
+
+### Step 0 — Resolve the corpus
+
+A **corpus** is one body of research — a subdirectory `memory/knowledge-sources/papers/<corpus>/` with its own `INDEX.md`, figures, and viewer. Corpora keep unrelated research topics from mixing: seed-picking, canonical tallies, and browsing are all corpus-scoped, while paper dedup stays global.
+
+Resolution order (same rule across all FlowScout commands):
+
+1. `--corpus=<slug>` explicit flag
+2. `FLOWSCOUT_CORPUS` environment variable
+3. Exactly one corpus exists (one subdir with an `INDEX.md`) → use it silently
+4. Otherwise → list the corpora from `memory/knowledge-sources/papers/corpora.md` and ask the user which to use (or whether to start a new one)
+
+`python3 scripts/research-cycle-helpers.py list-corpora` prints the available corpora as JSON.
+
+**If the resolved corpus is new** (its directory doesn't exist yet): create `memory/knowledge-sources/papers/<corpus>/` with an empty-table `INDEX.md`, and append a row to the registry `memory/knowledge-sources/papers/corpora.md` (`| <slug> | <one-line description — ask the user if not obvious> | <YYYY-MM-DD> |`). Create `corpora.md` with a header + table if it doesn't exist.
+
+**Legacy flat layout** (digests directly in the papers root, no corpus subdirs): keep operating on the root and suggest the user migrate — see the README's "Multiple corpora" section.
+
+Every path below written as `papers/<corpus>/...` means `memory/knowledge-sources/papers/<corpus>/...`.
 
 ### Step 1 — Resolve the lens
 
@@ -162,11 +182,11 @@ The main orchestrator session uses the `Read` tool on the temp PNG (Claude can r
 Then crop using Python PIL (standard with Python 3 distros):
 
 ```bash
-mkdir -p memory/knowledge-sources/papers/figures
+mkdir -p memory/knowledge-sources/papers/<corpus>/figures
 python3 <<EOF
 from PIL import Image
 src = "/tmp/digest-paper/<slug>/page-<N>.png"
-dst = "memory/knowledge-sources/papers/figures/<slug>-fig.png"
+dst = "memory/knowledge-sources/papers/<corpus>/figures/<slug>-fig.png"
 crop = Image.open(src).crop((left, top, right, bottom))
 crop.save(dst)
 EOF
@@ -244,9 +264,9 @@ Assemble a single markdown file with the structure below (see "Paper frontmatter
 [populated in Step 7]
 ```
 
-Write this draft to `memory/knowledge-sources/papers/<slug>.md`.
+Write this draft to `memory/knowledge-sources/papers/<corpus>/<slug>.md`.
 
-**Also create an empty notes sidecar** at `memory/knowledge-sources/papers/<slug>-notes.md` so the viewer's annotation backend has somewhere to write. Content:
+**Also create an empty notes sidecar** at `memory/knowledge-sources/papers/<corpus>/<slug>-notes.md` so the viewer's annotation backend has somewhere to write. Content:
 
 ```markdown
 ---
@@ -279,10 +299,12 @@ Find related digests already in the wiki using QMD:
 QUERY="<comma-separated topics> <comma-separated tags>"
 
 ./vendor/qmd/bin/qmd query "$QUERY" --json -n 10 \
-    | jq '[.[] | select(.file | startswith("memory/knowledge-sources/papers/"))
-                | select(.file != "memory/knowledge-sources/papers/<slug>.md")
+    | jq '[.[] | select(.file | startswith("memory/knowledge-sources/papers/<corpus>/"))
+                | select(.file != "memory/knowledge-sources/papers/<corpus>/<slug>.md")
                 | {file, score}]'
 ```
+
+Related-digest links are corpus-scoped (the `startswith` filter above) — papers in other corpora are different research threads, so don't cross-link them even when QMD scores them as similar.
 
 Take the top 3-5 hits (score > 0.5). For each:
 1. Read the related file's frontmatter to extract its `slug` and `title`
@@ -298,7 +320,7 @@ Take the top 3-5 hits (score > 0.5). For each:
 
 ### Step 9 — Update INDEX.md
 
-Append a new row to `memory/knowledge-sources/papers/INDEX.md`'s table, **serialized with a file lock** so concurrent sub-agent runs don't race and lose rows. Read the file inside the lock, edit, write back.
+Append a new row to `memory/knowledge-sources/papers/<corpus>/INDEX.md`'s table, **serialized with a file lock** so concurrent sub-agent runs don't race and lose rows. Read the file inside the lock, edit, write back. The lockfile is per-corpus (`/tmp/papers-index-<corpus>.lock`) so parallel runs on different corpora don't serialize against each other.
 
 Row format:
 ```
@@ -308,10 +330,10 @@ Row format:
 Wrap the read-modify-write in `scripts/with-lock.py`. The simplest pattern is a one-shot Python snippet executed under the lock:
 
 ```bash
-python3 scripts/with-lock.py /tmp/papers-index.lock --timeout 60 -- \
+python3 scripts/with-lock.py /tmp/papers-index-<corpus>.lock --timeout 60 -- \
   python3 -c '
 import re
-path = "memory/knowledge-sources/papers/INDEX.md"
+path = "memory/knowledge-sources/papers/<corpus>/INDEX.md"
 new_row = "| <date> | [<title>](<slug>.md) | <author> et al. | <year> | `<lens>` | <takeaway> |"
 with open(path) as f: content = f.read()
 # Insert new row right after the table separator line `|---|---|...`
@@ -324,7 +346,7 @@ Why the lock matters: in `/citation-walk` runs, 5–15 sub-agents may call `/dig
 
 ### Step 10 — Update viewer.html (only if first run, or if it doesn't exist)
 
-If `memory/knowledge-sources/papers/viewer.html` exists, do nothing — it auto-reads INDEX.md and the individual markdown files at view time. If it doesn't exist (this is the first paper ever digested), copy the template from `skills/digest-paper/viewer-template.html` (created on skill install) to that path.
+If `memory/knowledge-sources/papers/<corpus>/viewer.html` exists, do nothing — it auto-reads INDEX.md and the individual markdown files at view time. If it doesn't exist (this is the first paper digested into this corpus), copy the template from `skills/digest-paper/viewer-template.html` (created on skill install) to that path. Each corpus gets its own viewer page; the viewer's relative fetches resolve within the corpus directory.
 
 ### Step 11 — Refresh QMD index
 
@@ -345,20 +367,21 @@ You can tell you're inside an orchestrator if your prompt instructions came from
 ### Step 12 — Report to user
 
 Tell the user:
-- File written: `memory/knowledge-sources/papers/<slug>.md`
+- File written: `memory/knowledge-sources/papers/<corpus>/<slug>.md`
 - Reviewer severity (if not Clean, call it out)
 - Number of related digests linked
 - Number of citations extracted (this is the auto-research hook — future `/auto-research` skill will walk these)
-- How to browse: run `python3 scripts/papers-server.py` and open `http://localhost:8000/viewer.html` (enables the annotation + theses features; plain `python3 -m http.server 8000` from the papers directory also works for read-only browsing)
+- How to browse: run `python3 scripts/papers-server.py` and open `http://localhost:8000/<corpus>/viewer.html` (enables the annotation + theses features; an Obsidian vault pointed at the papers root also renders everything natively)
 - Suggest next actions: `/digest-paper <next-url>` to grow the wiki, or `qmd query "..."` to search across all digested papers
 
 ## Paper frontmatter schema
 
-Every digest file at `memory/knowledge-sources/papers/<slug>.md` MUST have this frontmatter. Field order matters for readability — keep it consistent:
+Every digest file at `memory/knowledge-sources/papers/<corpus>/<slug>.md` MUST have this frontmatter. Field order matters for readability — keep it consistent:
 
 ```yaml
 ---
 kind: paper-digest                     # marks this as NOT a v2 session memory
+corpus: <corpus>                       # which research corpus this belongs to
 slug: <slug>                           # e.g. castricato-2024-persona-testbed
 title: "<full paper title>"
 authors:                               # array of strings, "First Last" format
@@ -415,16 +438,18 @@ best_figure:                           # extracted in Step 5.5; null if no PDF o
 - **Always run `qmd update` + `qmd embed` at the end.** Without it, the new digest is invisible to next session's search.
 - **One paper per run.** Don't batch multiple URLs in one invocation — each gets its own slug, frontmatter, and QMD pass.
 - **Figure extraction requires `pdftoppm`** (from poppler-utils). If unavailable, the digest still ships — just without an embedded figure image. Don't fail the run over a missing figure.
+- **Dedup is global, writes are corpus-scoped.** Before digesting, check `python3 scripts/research-cycle-helpers.py wiki-keys` (all corpora). If the paper already exists in ANOTHER corpus, don't re-digest — add a pointer row to this corpus's INDEX.md (`| <date> | [<title>](../<other-corpus>/<slug>.md) | ... | (in <other-corpus>) |`) and tell the user.
 
 ## Verify
 
 After running the skill, confirm:
-- [ ] `memory/knowledge-sources/papers/<slug>.md` exists with full frontmatter
-- [ ] `memory/knowledge-sources/papers/INDEX.md` has a new row for it
+- [ ] `memory/knowledge-sources/papers/<corpus>/<slug>.md` exists with full frontmatter (including `corpus:`)
+- [ ] `memory/knowledge-sources/papers/<corpus>/INDEX.md` has a new row for it
+- [ ] `memory/knowledge-sources/papers/corpora.md` lists the corpus
 - [ ] `./vendor/qmd/bin/qmd search "<paper-title-fragment>"` returns the new file
 - [ ] If `related_digests` is non-empty, the body contains `[[slug]]` wiki-links
 - [ ] If `hallucination_severity != "Clean"`, the `## Reviewer Notes` section is populated
-- [ ] If the paper was a PDF, `memory/knowledge-sources/papers/figures/<slug>-fig.png` exists and the digest body references it with a markdown image tag
+- [ ] If the paper was a PDF, `memory/knowledge-sources/papers/<corpus>/figures/<slug>-fig.png` exists and the digest body references it with a markdown image tag
 
 ## Auto-research hook (forward compatibility)
 

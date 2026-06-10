@@ -5,7 +5,7 @@ description: Walk the citation graph from a seed paper to build coverage on a to
 
 # /citation-walk — Citation-graph walker
 
-The user invoked `/citation-walk <seed-url-or-slug> --topic="..." [--broad | --deep | --canonical | --orbit] [--max-papers=N] [--max-depth=N] [--min-relevance=0.5] [--min-canonical-count=3] [--lens=<slug>]` (or asked you to walk citations from a paper / find related papers / build coverage on a topic / find canonical works / find papers connected by idea not by citation).
+The user invoked `/citation-walk <seed-url-or-slug> --topic="..." [--broad | --deep | --canonical | --orbit] [--max-papers=N] [--max-depth=N] [--min-relevance=0.5] [--min-canonical-count=3] [--lens=<slug>] [--corpus=<slug>]` (or asked you to walk citations from a paper / find related papers / build coverage on a topic / find canonical works / find papers connected by idea not by citation).
 
 The full skill methodology lives at `skills/citation-walk/SKILL.md`. Read that file in full and follow it end-to-end, using the arguments the user provided as input.
 
@@ -23,6 +23,7 @@ The full skill methodology lives at `skills/citation-walk/SKILL.md`. Read that f
 - `--min-relevance=0.5` — drift guard (ignored for `--canonical` and `--orbit`)
 - `--min-canonical-count=3` — canonical threshold
 - `--lens=<slug>` — passed through to /digest-paper for each visited paper
+- `--corpus=<slug>` — research corpus to walk within (all reads + writes scoped to it; dedup stays global)
 
 Modes are mutually exclusive — reject invocations with more than one of `--broad` / `--deep` / `--canonical` / `--orbit`.
 

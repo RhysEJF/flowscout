@@ -23,6 +23,7 @@ description: Run one full cycle of /citation-walk across all four modes (broad �
 | `--max-papers-per-mode=N` | 10 | Hard cap per phase. Total per cycle ≤ 4×N. |
 | `--modes=broad,canonical,deep,orbit` | all four | Subset of phases to run. Useful for skipping when you know one mode won't yield (e.g. `--modes=broad,canonical` early on, before you have a great seed for orbit). |
 | `--lens=<slug>` | `generic` | Passed through to every `/citation-walk` call. |
+| `--corpus=<slug>` | resolved | Research corpus this cycle grows. Resolution rule: see `skills/digest-paper/SKILL.md` Step 0. Pass `--corpus=<corpus>` on EVERY `research-cycle-helpers.py` call and every `/digest-paper` dispatch — seed-picking, canonical tallies, and centrality are corpus-scoped; dedup stays global. |
 | `--cycle-num=N` | auto | Auto-detected from prior cycle dirs; only override if rebuilding. |
 | `--dry-run` | off | Show the plan (which seeds, which modes, projected paper count) but don't fire any agents. ~10s. |
 
@@ -47,12 +48,15 @@ The orchestrator-dispatches-directly pattern is what unlocks this — see "Archi
 
 ```
 1. Validate topic is non-empty.
+   Resolve the corpus (digest-paper Step 0 rule). A new topic usually means a new
+   corpus — if the user didn't pass --corpus and the topic clearly doesn't belong
+   to any existing corpus, suggest creating one rather than defaulting silently.
 2. Slugify topic: lowercase, kebab-case, max 40 chars. e.g. "AI agent memory" → "ai-agent-memory"
-3. Detect cycle number:
-   - Glob experiences/research-cycle/cycle-*-<topic-slug>-*/state.json
-   - cycle_num = max(existing) + 1; if none exist, cycle_num = 1
-4. Create run dir: experiences/research-cycle/cycle-<cycle_num>-<topic-slug>-<YYYY-MM-DD>/
-5. Initialize state.json (see schema below)
+3-5. Run `python3 scripts/research-cycle-helpers.py init-cycle "<topic>" --corpus=<corpus>
+     [--max=N] [--lens=L]` — it globs experiences/research-cycle/<corpus>/cycle-*-<topic-slug>-*,
+     auto-detects cycle_num, creates the run dir
+     experiences/research-cycle/<corpus>/cycle-<cycle_num>-<topic-slug>-<YYYY-MM-DD>/
+     and writes the initial state.json (see schema below — includes "corpus").
 6. If --dry-run, print plan and exit.
 ```
 
@@ -67,9 +71,10 @@ relevant = subprocess.run(
     capture_output=True, shell=True
 )
 relevant_papers = [r for r in json.loads(relevant.stdout)
-                   if r['file'].startswith('memory/knowledge-sources/papers/')
+                   if r['file'].startswith(f'memory/knowledge-sources/papers/{corpus}/')
                    and r['file'].endswith('.md')
                    and r['score'] >= 0.5]
+# (equivalent: python3 scripts/research-cycle-helpers.py topic-relevant-count "<topic>" --corpus=<corpus>)
 
 if len(relevant_papers) >= 3:
     # Enough wiki context exists — skip Phase 0, go directly to Step 2
@@ -115,7 +120,7 @@ if not bootstrap_seeds:
 
 # 5. Fire parallel /digest-paper agents on the bootstrap seeds
 parallel_dispatch([
-    {"prompt": f"Execute /digest-paper {s['url']} --lens={state.lens}, sub-agent mode",
+    {"prompt": f"Execute /digest-paper {s['url']} --lens={state.lens} --corpus={state.corpus}, sub-agent mode",
      "subagent_type": "general-purpose"}
     for s in bootstrap_seeds
 ])
@@ -151,7 +156,7 @@ inbound = defaultdict(int)
 outbound = defaultdict(int)
 already_used_as_seed = set()  # read from prior cycle state.jsons
 
-for digest_file in glob("memory/knowledge-sources/papers/*.md"):
+for digest_file in glob(f"memory/knowledge-sources/papers/{corpus}/*.md"):
     if not is_topic_relevant(digest_file, state.topic):  # via qmd vsearch
         continue
     fm = parse_frontmatter(digest_file)
@@ -195,10 +200,10 @@ For each picked seed in `state.seeds`, the orchestrator runs the methodology **i
 
 ```bash
 # 1. Read this seed's citations[] from frontmatter
-python3 scripts/research-cycle-helpers.py read-citations <seed-slug> > /tmp/rc-cands-<seed>.json
+python3 scripts/research-cycle-helpers.py read-citations <seed-slug> --corpus=<corpus> > /tmp/rc-cands-<seed>.json
 
-# 2. Build wiki dedup set
-python3 scripts/research-cycle-helpers.py wiki-keys | sort -u > /tmp/rc-wiki-keys.txt
+# 2. Build wiki dedup set (global across ALL corpora by design — never re-digest)
+python3 scripts/research-cycle-helpers.py wiki-keys --corpus=<corpus> | sort -u > /tmp/rc-wiki-keys.txt
 ```
 
 Then inline Python (orchestrator runs via Bash heredoc): for each candidate in `/tmp/rc-cands-<seed>.json`, compute `make_keys(candidate)` and filter out any that intersect `/tmp/rc-wiki-keys.txt`. For surviving candidates with arxiv IDs, batch-fetch abstracts:
@@ -237,14 +242,15 @@ for url, slug_guess in picked_papers:
       description=f"Digest {slug_guess}",
       prompt=f"Execute /digest-paper per skills/digest-paper/SKILL.md (read it in full) on:\n"
              f"  URL: {url}\n"
-             f"  Lens: --lens={lens}\n\n"
+             f"  Lens: --lens={lens}\n"
+             f"  Corpus: --corpus={corpus}\n\n"
              f"YOU ARE A TOP-LEVEL SUB-AGENT invoked by /research-cycle orchestrator.\n"
              f"Your inner 8-way analyses will collapse to inline (sub-agents can't\n"
              f"dispatch Agents) — that's expected. With your fresh 200K-token context\n"
              f"for just this one paper, all 8 sections + figure extraction will\n"
              f"complete reliably (we've measured this works at L1).\n\n"
              f"SKIP `qmd embed` (orchestrator handles at cycle end).\n"
-             f"USE `python3 scripts/with-lock.py /tmp/papers-index.lock --timeout 60 -- ...`\n"
+             f"USE `python3 scripts/with-lock.py /tmp/papers-index-{corpus}.lock --timeout 60 -- ...`\n"
              f"for INDEX append. Use the same lock pattern for `qmd update`.\n\n"
              f"Report ONLY: slug, hallucination_severity, citations_count, figure_extracted."
     )
@@ -255,7 +261,7 @@ for url, slug_guess in picked_papers:
 After all return, reconcile INDEX (catches any sub-agent that skipped its append):
 
 ```bash
-python3 scripts/research-cycle-helpers.py reconcile-index
+python3 scripts/research-cycle-helpers.py reconcile-index --corpus=<corpus>
 ```
 
 Aggregate digested slugs into `state.phase1.digested` and `state.phase1.skipped`.
@@ -265,7 +271,7 @@ Aggregate digested slugs into `state.phase1.digested` and `state.phase1.skipped`
 The orchestrator computes the canonical tally inline:
 
 ```bash
-python3 scripts/research-cycle-helpers.py canonical-tally <min_count> <top_n> > /tmp/rc-canonical.json
+python3 scripts/research-cycle-helpers.py canonical-tally <min_count> <top_n> --corpus=<corpus> > /tmp/rc-canonical.json
 # Default min_count=3, top_n=<max_papers_per_mode>
 ```
 
@@ -285,7 +291,8 @@ Inherently sequential (each hop's citation list comes from previous hop's digest
 
 ```bash
 # Exclude prior deep seeds + Phase 1 broad seeds used in this cycle
-python3 scripts/research-cycle-helpers.py pick-deep-seed <prior-seed-1> <prior-seed-2> ...
+# (corpus-scoped — another corpus's hub papers must never seed this topic's deep walk)
+python3 scripts/research-cycle-helpers.py pick-deep-seed <prior-seed-1> <prior-seed-2> ... --corpus=<corpus>
 ```
 
 For each of `max_papers` hops (default 5):
@@ -305,7 +312,7 @@ After all hops: reconcile INDEX. Record chain in `state.phase3.chain`.
 Pick the orbit seed:
 
 ```bash
-python3 scripts/research-cycle-helpers.py pick-orbit-seed <prior-orbit-seed-1> ...
+python3 scripts/research-cycle-helpers.py pick-orbit-seed <prior-orbit-seed-1> ... --corpus=<corpus>
 ```
 
 Orbit mode methodology (the orchestrator runs this):
@@ -326,7 +333,7 @@ This is the compounding artifact. Cycle N reads cycles 1..N-1's meta-digests + t
 
 ```
 1. Find all prior cycle meta-digests on this topic:
-   prior_paths = sorted(glob("experiences/research-cycle/cycle-*-<topic-slug>-*/cycle-digest.md"))
+   prior_paths = sorted(glob("experiences/research-cycle/<corpus>/cycle-*-<topic-slug>-*/cycle-digest.md"))
    (Sort by cycle number, oldest first.)
 
 2. Aggregate this cycle's new papers across all 4 phases:
@@ -340,7 +347,7 @@ This is the compounding artifact. Cycle N reads cycles 1..N-1's meta-digests + t
    - Pass CYCLE_NUM, TOPIC, NEW_PAPER_SLUGS, MODES_RUN, STARTED_AT, COMPLETED_AT
    - Pass PRIOR_CYCLE_PATHS as a list (subagent will Read each)
    - Pass WIKI_SIZE, TOPIC_RELEVANT_COUNT (one qmd query call)
-   - Subagent writes to experiences/research-cycle/cycle-<N>-<topic-slug>-<DATE>/cycle-digest.md
+   - Subagent writes to experiences/research-cycle/<corpus>/cycle-<N>-<topic-slug>-<DATE>/cycle-digest.md
 
 5. After subagent returns, write carry-over to state.carry_over_for_next_cycle.
 ```
@@ -366,7 +373,7 @@ Cycle <N> complete on "<topic>" (<wall-clock>)
   Phase 2 canonical:  +<n> papers
   Phase 3 deep:       +<n> papers (seed: <slug>, chain: <slug> → <slug> → ...)
   Phase 4 orbit:      +<n> papers (seed: <slug>)
-  Phase 5 digest:     experiences/research-cycle/cycle-<N>-<topic>-<date>/cycle-digest.md
+  Phase 5 digest:     experiences/research-cycle/<corpus>/cycle-<N>-<topic>-<date>/cycle-digest.md
   Wiki: <before> → <after> papers
   Carry-over for cycle <N+1>: <n> candidates queued
 
@@ -382,6 +389,7 @@ Next-cycle recommendation:
 ```json
 {
   "cycle_num": 3,
+  "corpus": "<corpus>",
   "topic": "AI agent memory architecture and retrieval",
   "topic_slug": "ai-agent-memory-architecture-and-retrieval",
   "max_papers_per_mode": 10,
@@ -410,7 +418,7 @@ Next-cycle recommendation:
     "seed": "adler-2026-storage-not-memory",
     "digested": ["...", "..."]
   },
-  "phase5_meta_digest_path": "experiences/research-cycle/cycle-3-<topic-slug>-<date>/cycle-digest.md",
+  "phase5_meta_digest_path": "experiences/research-cycle/<corpus>/cycle-3-<topic-slug>-<date>/cycle-digest.md",
   "papers_added_this_cycle": 27,
   "carry_over_for_next_cycle": [
     {"title": "...", "score": 0.82, "from_phase": "broad", "source_url": "https://..."}
@@ -428,7 +436,8 @@ Next-cycle recommendation:
 - **Phase 5 reads ALL prior cycle meta-digests on this topic, in order.** This is what makes the knowledge compound. Do not skip this read.
 - **Skip phases gracefully.** If canonical has < 3 qualifying candidates, log "skipped: insufficient signal" and move on. Don't fail the cycle.
 - **Auto-pick seeds never reuse a seed** across phases of the same cycle OR across cycles. Track prior seeds in `state.prior_seeds[phase]` (read across all prior cycle state.jsons).
-- **Reconcile INDEX after every phase.** `python3 scripts/research-cycle-helpers.py reconcile-index` is idempotent — catches any sub-agent that skipped its INDEX append under context pressure (rare with fresh-context architecture but still possible).
+- **Reconcile INDEX after every phase.** `python3 scripts/research-cycle-helpers.py reconcile-index --corpus=<corpus>` is idempotent — catches any sub-agent that skipped its INDEX append under context pressure (rare with fresh-context architecture but still possible).
+- **Pass `--corpus=<corpus>` on every helpers call and every `/digest-paper` dispatch.** The helpers fall back to auto-resolution, but with 2+ corpora that means a hard error mid-cycle — explicit is cheap insurance.
 - **Run `qmd update + qmd embed` ONLY at cycle end** (Step 8). Sub-agents skip these to avoid concurrent corruption — orchestrator does one consolidated reindex.
 
 ## Loop compatibility
@@ -448,8 +457,9 @@ Self-paced is the right default. The model checks if there's a running cycle (st
 ## Verify
 
 After a cycle completes:
-- [ ] `experiences/research-cycle/cycle-<N>-<topic>-<date>/state.json` has `status: "completed"`
-- [ ] `experiences/research-cycle/cycle-<N>-<topic>-<date>/cycle-digest.md` exists
+- [ ] `experiences/research-cycle/<corpus>/cycle-<N>-<topic>-<date>/state.json` has `status: "completed"`
+- [ ] `experiences/research-cycle/<corpus>/cycle-<N>-<topic>-<date>/cycle-digest.md` exists
+- [ ] Every new digest landed in `memory/knowledge-sources/papers/<corpus>/` (not another corpus, not the root)
 - [ ] All slugs in `state.papers_added_this_cycle` correspond to real digest files
 - [ ] Cycle-digest's frontmatter `prior_cycles_referenced` matches the actual prior cycle nums
 - [ ] `qmd search "<topic-fragment>"` returns this cycle's digests + meta-digest

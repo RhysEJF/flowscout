@@ -26,6 +26,7 @@ description: Layer 2 of the Flow Frontier research engine. Takes an open thesis 
 | `--max-sources=N` | Max candidate sources to gather per thesis (Exa + WebSearch combined). Default 12. |
 | `--gen-queries=N` | How many adversarial search queries to generate per thesis. Default 4. |
 | `--no-experiment` | Skip the experiment-design draft even for theses that remain `open` or `partially-resolved`. Faster + cheaper. |
+| `--corpus=<slug>` | Research corpus whose theses to verify. Resolution rule: see `skills/digest-paper/SKILL.md` Step 0. |
 | `--force` | Re-verify even already-verified theses (overwrites previous verdict). |
 | `--dry-run` | Show which theses would be processed + estimated cost; do not call agents or write. |
 
@@ -35,9 +36,11 @@ Exactly one of: positional `<slug>`, `--all-open`, `--status=<value>`. If none g
 
 ## Methodology
 
+**Corpus convention**: resolve the corpus first (digest-paper Step 0 rule: `--corpus=` > `FLOWSCOUT_CORPUS` > sole corpus > ask). Throughout this skill, `experiences/theses/` means `experiences/theses/<corpus>/` and `experiences/verify-thesis/` means `experiences/verify-thesis/<corpus>/`. Batch sweeps (`--all-open`, `--status=`) never cross corpora — run once per corpus instead.
+
 ### Step 1 — Parse args + initialize state
 
-1. Validate exclusivity (slug OR --all-open OR --status).
+1. Validate exclusivity (slug OR --all-open OR --status). Resolve the corpus (see convention above) and record it in `state.json` as `"corpus"`.
 2. Resolve the thesis set:
    - Single slug: read `experiences/theses/<slug>.md` — error if missing.
    - `--all-open`: scan `experiences/theses/*.md` for `kind: thesis` AND `status: open|partially-resolved`. Skip `-notes.md` files.

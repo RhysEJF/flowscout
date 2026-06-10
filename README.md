@@ -94,6 +94,37 @@ Once installed, all five commands are available as Claude Code slash commands.
 | `/flow-frontier` | Mines cross-paper theses across five gap-types: convergence, unstated-assumption, mechanism-gap, edge-of-consensus, direct contradiction. Emits falsifiable theses. | The wiki | `experiences/theses/<slug>.md` |
 | `/verify-thesis` | Generates adversarial search queries per thesis, runs them through Exa + WebSearch, scores candidates as supports/contradicts/qualifies/irrelevant, synthesises a verdict, drafts an experiment if the thesis stays open. | A thesis + the open literature | Updated thesis file with verdict |
 
+## Multiple corpora — researching more than one field
+
+A **corpus** is one body of research: a subdirectory of the papers wiki with its own `INDEX.md`, figures, and viewer. Pass `--corpus=<slug>` to any command (or set `FLOWSCOUT_CORPUS`) and everything scopes to it:
+
+```
+memory/knowledge-sources/papers/
+├── corpora.md                  # registry of corpora
+├── agentic-memory/             # one research stream
+│   ├── INDEX.md
+│   ├── figures/
+│   └── <slug>.md (+ -notes.md sidecars)
+└── reef-ecology/               # a completely different one
+    └── ...
+
+experiences/
+├── citation-walk/<corpus>/<run>/
+├── research-cycle/<corpus>/cycle-N-<topic>-<date>/
+├── theses/<corpus>/            # per-corpus INDEX.md + _manifest.json
+└── verify-thesis/<corpus>/<run-id>/
+```
+
+The isolation rules:
+
+- **Corpus-scoped**: seed-picking, centrality, canonical tallies, related-digest linking, thesis mining, viewer browsing. A new topic's deep-walk can never get seeded with another field's hub paper.
+- **Global**: paper dedup. A paper digested in any corpus is never re-digested; if it's relevant to a second corpus, the skills add a pointer row to that corpus's INDEX instead.
+- **Resolution**: `--corpus=` > `FLOWSCOUT_CORPUS` > the sole existing corpus (silent) > ask. With one corpus you never need the flag.
+
+Starting a new field is just: `/research-cycle "coral reef acoustics" --corpus=reef-ecology` — the corpus directory, INDEX, and registry row are created on first digest.
+
+**Upgrading from the flat layout?** Existing installs with digests directly in `papers/` keep working (the tools detect the legacy layout and operate on the root). To adopt corpora, move your digests + `INDEX.md` + `figures/` + sidecars into `papers/<corpus-name>/`, move `experiences/theses/*` into `experiences/theses/<corpus-name>/`, create `papers/corpora.md` with one row, and reindex QMD.
+
 ## Browsing your corpus
 
 FlowScout ships with a lightweight HTML viewer (`skills/digest-paper/viewer-template.html`) that auto-installs to `memory/knowledge-sources/papers/viewer.html` the first time you run `/digest-paper`. Open it in a browser to scroll your digests, search them, and click through to the markdown source. It is a single self-contained file with no build step.
@@ -104,7 +135,7 @@ For basic browsing, any static file server works (`python3 -m http.server 8000` 
 python3 scripts/papers-server.py   # then open http://localhost:8000/viewer.html
 ```
 
-**Obsidian, Logseq, or similar users**: point your vault at `memory/knowledge-sources/papers/` and you can ignore the viewer entirely. The digests are plain markdown with YAML frontmatter, so your existing tooling will pick them up. The bundled viewer exists because I had not adopted Obsidian when I built this and wanted something quick I could read in the browser. Might build a richer one on top of it later.
+**Obsidian, Logseq, or similar users**: point your vault at `memory/knowledge-sources/papers/` and you can ignore the viewer entirely. The digests are plain markdown with YAML frontmatter, so your existing tooling will pick them up — each corpus is a folder, and Obsidian's Bases (core plugin) gives you a sortable table view per corpus filtered on the `corpus` frontmatter property or folder. The bundled viewer exists because I had not adopted Obsidian when I built this and wanted something quick I could read in the browser. Might build a richer one on top of it later.
 
 ## Prerequisites
 
@@ -112,9 +143,9 @@ python3 scripts/papers-server.py   # then open http://localhost:8000/viewer.html
 - **python3** for the bundled helper scripts in `scripts/` (cross-sub-agent locking, the viewer server, `/research-cycle` bookkeeping). `/research-cycle` additionally needs PyYAML: `pip3 install pyyaml`
 - **An Exa API key** for orbit mode and verify-thesis (set as `EXA_API_KEY` in your shell, or via the [Exa MCP](https://github.com/exa-labs/exa-mcp-server))
 - **A second brain with these conventions**:
-    - `memory/knowledge-sources/papers/` for paper digests
-    - `experiences/citation-walk/` for walk runs
-    - `experiences/theses/` for mined theses
+    - `memory/knowledge-sources/papers/<corpus>/` for paper digests
+    - `experiences/citation-walk/<corpus>/` for walk runs
+    - `experiences/theses/<corpus>/` for mined theses
 
   These are the [Flow OS](https://thecognitiveshift.com/training) defaults. If your second brain uses different paths, edit the `SKILL.md` files in `skills/<command>/` to match. The path conventions are the only Flow OS-specific assumption FlowScout makes.
 - Optional: a hybrid search engine (Flow OS uses [QMD](https://github.com/tobi/qmd) for corpus-wide search inside `--orbit` and `--canonical` modes). The commands degrade gracefully without it.
@@ -142,6 +173,7 @@ Or wrap the lot in `/loop` and go to bed.
 
 FlowScout is alpha. Things on the list:
 
+- [x] Multiple corpora: per-field subdirectories (`--corpus=<slug>`) so research streams don't mix
 - [ ] Path config: a single `flowscout.toml` to override `memory/knowledge-sources/papers/` etc.
 - [ ] Second-brain adapters (Obsidian, Logseq, Notion export folders)
 - [ ] Built-in scheduling without needing `/loop`

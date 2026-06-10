@@ -5,7 +5,7 @@ description: One full cycle of /citation-walk across all four modes (broad → c
 
 # /research-cycle — Multi-phase citation-walking auto-loop
 
-The user invoked `/research-cycle "<topic>" [--seeds=slug1,slug2,...] [--max-papers-per-mode=10] [--modes=broad,canonical,deep,orbit] [--lens=<slug>] [--cycle-num=N] [--dry-run]` (or asked to "run a research cycle", "loop the citation walker overnight", or "do a multi-phase walk on this topic").
+The user invoked `/research-cycle "<topic>" [--seeds=slug1,slug2,...] [--max-papers-per-mode=10] [--modes=broad,canonical,deep,orbit] [--lens=<slug>] [--corpus=<slug>] [--cycle-num=N] [--dry-run]` (or asked to "run a research cycle", "loop the citation walker overnight", or "do a multi-phase walk on this topic").
 
 The full skill methodology lives at `skills/research-cycle/SKILL.md`. Read that file in full and follow it end-to-end, using the arguments the user provided as input.
 
@@ -17,6 +17,7 @@ The full skill methodology lives at `skills/research-cycle/SKILL.md`. Read that 
 - `--max-papers-per-mode=10` — budget cap per phase
 - `--modes=broad,canonical,deep,orbit` — subset of phases to run (default: all four)
 - `--lens=<slug>` — lens passed through to every /citation-walk invocation (default: `generic`)
+- `--corpus=<slug>` — research corpus this cycle grows (seed-picking + canonical tallies scoped to it)
 - `--cycle-num=N` — override auto-detected cycle number
 - `--dry-run` — show the plan, don't fire any sub-agents
 

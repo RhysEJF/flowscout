@@ -29,6 +29,7 @@ description: Mine cross-paper insights from the papers wiki across five gap-type
 | `--overlap-threshold=0.80` | **v2.** When starting a fresh cluster, warn + exit if any existing cluster shares ≥ this fraction of papers. Override with `--force-new`. Default 0.80. |
 | `--force-new` | **v2.** Skip the overlap check and proceed with the fresh cluster even if it overlaps heavily with an existing one. |
 | `--cluster-name=<slug>` | Override the auto-generated cluster name. |
+| `--corpus=<slug>` | Research corpus to mine. Resolution rule: see `skills/digest-paper/SKILL.md` Step 0. |
 | `--force` | Re-run even if cluster paper-set is unchanged since last run. |
 | `--no-cache` | **v2.** Skip the per-paper Pass A assumption cache (force re-extraction). Useful after a prompt change. |
 | `--dry-run` | Resolve cluster + show what would run; do not emit theses. |
@@ -39,9 +40,11 @@ Exactly one of `--topic`, `--slugs`, `--refresh`, `--merge-clusters`. If none, e
 
 ## Methodology
 
+**Corpus convention**: resolve the corpus first (digest-paper Step 0 rule: `--corpus=` > `FLOWSCOUT_CORPUS` > sole corpus > ask). Throughout this skill, `experiences/theses/` means `experiences/theses/<corpus>/` (each corpus keeps its own theses, `INDEX.md`, `_manifest.json`, and `_cache/`), `experiences/flow-frontier/` means `experiences/flow-frontier/<corpus>/`, and digest reads are scoped to `memory/knowledge-sources/papers/<corpus>/`. Theses never mix across corpora — a cluster is always within one corpus. Create the theses corpus dir (with empty INDEX + manifest) on first run.
+
 ### Step 1 — Parse args + initialize state
 
-1. Validate args (exactly one of `--topic` / `--slugs` / `--refresh`).
+1. Validate args (exactly one of `--topic` / `--slugs` / `--refresh`). Resolve the corpus (see convention above) and record it in `state.json` as `"corpus"`.
 2. Compute the cluster name:
    - If `--cluster-name=<slug>` supplied → use it
    - Else if `--topic`: take the topic, lowercase, strip stopwords (a, an, the, of, in, on, for, to, vs, and, or, with, by, from, as), kebab-case the first 6 remaining content words, truncate to 60 chars. Example: `"agent memory write-time vs query-time"` → `agent-memory-write-time-query-time`.
@@ -77,7 +80,7 @@ Exactly one of `--topic`, `--slugs`, `--refresh`, `--merge-clusters`. If none, e
 **`--topic`:**
 ```bash
 ./vendor/qmd/bin/qmd query "<topic>" --json -n <max_papers + 10> \
-  | jq '[.[] | select(.file | startswith("memory/knowledge-sources/papers/"))
+  | jq '[.[] | select(.file | startswith("memory/knowledge-sources/papers/<corpus>/"))
               | select(.file | endswith(".md"))
               | select(.file | endswith("-notes.md") | not)
               | {slug: (.file | sub(".*/"; "") | sub(".md$"; "")), score}]
@@ -86,7 +89,7 @@ Exactly one of `--topic`, `--slugs`, `--refresh`, `--merge-clusters`. If none, e
 Filter out `-notes.md`, `INDEX.md`, anything not a digest. If fewer than 5 papers match, error and tell the user the topic is too narrow.
 
 **`--slugs`:**
-Split on commas. Validate each slug has `memory/knowledge-sources/papers/<slug>.md`. Error on the first missing.
+Split on commas. Validate each slug has `memory/knowledge-sources/papers/<corpus>/<slug>.md`. Error on the first missing.
 
 **`--refresh`:**
 Load `experiences/theses/_manifest.json`. For each cluster, re-resolve its current paper-set via the saved `topic_query`. Compute current `papers_sha = sha256(sorted(papers).join("\n"))`. Compare to manifest's stored `papers_sha`. If unchanged and `--force` not set: skip this cluster. If changed: queue it for re-run.
@@ -237,6 +240,7 @@ Plus rewrite `log.md` with the final summary.
 ```yaml
 ---
 kind: thesis
+corpus: <corpus>                   # which research corpus this thesis was mined from
 slug: <kebab-slug>
 title: "<one-sentence claim>"
 gap_type:                          # array — supports multi-tag

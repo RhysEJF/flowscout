@@ -24,12 +24,13 @@ The full skill methodology lives at `skills/flow-frontier/SKILL.md`. Read that f
 - `--force-new` — bypass overlap guard (v2). Use when you really do want a fresh cluster despite overlap.
 - `--no-cache` — bypass Pass A assumption cache (v2). Force fresh extraction. Useful after prompt edits.
 - `--cluster-name=<slug>` — override auto-generated cluster name
+- `--corpus=<slug>` — research corpus to mine (theses + reads scoped to it)
 - `--force` — re-run even if cluster unchanged
 - `--dry-run` — preview without writing
 
 **Outputs:**
-- `experiences/theses/<slug>.md` — one file per new thesis, with frontmatter + falsification section
-- `experiences/theses/INDEX.md` — appended rows
+- `experiences/theses/<corpus>/<slug>.md` — one file per new thesis, with frontmatter + falsification section
+- `experiences/theses/<corpus>/INDEX.md` — appended rows
 - `experiences/theses/_manifest.json` — cluster tracking + reverse map (papers → theses)
 
 Modes are mutually exclusive — reject invocations with more than one of `--topic` / `--slugs` / `--refresh`.

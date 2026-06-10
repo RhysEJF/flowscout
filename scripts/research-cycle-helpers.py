@@ -9,7 +9,15 @@ inside a sub-agent, the orchestrator can dispatch /digest-paper directly at
 top-level — which means each paper gets its own fresh 200K-token sub-agent
 context, instead of N papers sharing one sub-agent's context.
 
+Corpus scoping:
+  Every subcommand accepts --corpus=<slug> (or the FLOWSCOUT_CORPUS env var) and
+  operates on memory/knowledge-sources/papers/<corpus>/. Resolution order:
+  --corpus= > FLOWSCOUT_CORPUS > sole existing corpus > legacy flat root.
+  Reads that pick seeds/canonicals/centrality are corpus-scoped (research topics
+  must not bleed into each other); dedup (wiki-keys) is deliberately global.
+
 Subcommands:
+  list-corpora                 — list corpus subdirs (+ legacy-root flag) as JSON
   centrality                   — print top-N hub papers in the wiki by (inbound + 0.1*outbound)
   dedup-keys SLUG              — print all multi-keys for a digest (for dedup checks)
   wiki-keys                    — print all dedup-keys for every wiki paper (one per line)
@@ -48,6 +56,61 @@ except ImportError:
 PAPERS = "memory/knowledge-sources/papers"
 RESEARCH_CYCLE = "experiences/research-cycle"
 
+# Set by __main__ via _resolve_corpus(). None means legacy flat layout
+# (digests directly in PAPERS root, pre-corpus installs).
+CORPUS = None
+
+
+def _list_corpora():
+    """Corpus slugs = subdirectories of PAPERS that contain an INDEX.md."""
+    if not os.path.isdir(PAPERS):
+        return []
+    return sorted(
+        d for d in os.listdir(PAPERS)
+        if os.path.isdir(os.path.join(PAPERS, d))
+        and d != "figures"
+        and os.path.exists(os.path.join(PAPERS, d, "INDEX.md"))
+    )
+
+
+def _root_has_legacy_digests():
+    """True if digests sit directly in the PAPERS root (pre-corpus flat layout)."""
+    if not os.path.isdir(PAPERS):
+        return False
+    return any(
+        fn.endswith(".md") and not fn.endswith("-notes.md")
+        and fn not in ("INDEX.md", "corpora.md")
+        for fn in os.listdir(PAPERS)
+    )
+
+
+def _resolve_corpus(explicit):
+    """--corpus= beats FLOWSCOUT_CORPUS beats sole-corpus beats legacy root."""
+    corpora = _list_corpora()
+    corpus = explicit or os.environ.get("FLOWSCOUT_CORPUS")
+    if corpus:
+        if corpus not in corpora:
+            sys.exit(f"unknown corpus: {corpus!r} — available: {', '.join(corpora) or 'none'}")
+        return corpus
+    if len(corpora) == 1:
+        return corpora[0]
+    if not corpora and _root_has_legacy_digests():
+        print("note: flat pre-corpus layout detected — operating on the papers root. "
+              "See README 'Multiple corpora' to migrate.", file=sys.stderr)
+        return None
+    sys.exit(
+        "--corpus=<slug> required (or set FLOWSCOUT_CORPUS). "
+        f"Available: {', '.join(corpora) or 'none — run /digest-paper with --corpus=<slug> to start one'}"
+    )
+
+
+def corpus_dir():
+    return os.path.join(PAPERS, CORPUS) if CORPUS else PAPERS
+
+
+def cycle_root():
+    return os.path.join(RESEARCH_CYCLE, CORPUS) if CORPUS else RESEARCH_CYCLE
+
 
 def _normalize_title(t):
     return re.sub(r'[^a-z0-9]+', ' ', (t or '').lower()).strip()[:60]
@@ -71,10 +134,22 @@ def make_keys(c):
     return keys
 
 
+def _digest_path(slug):
+    """Find a digest by slug — current corpus first, then root, then all corpora.
+    Slugs are globally unique across corpora, so first hit wins."""
+    candidates = [os.path.join(corpus_dir(), f"{slug}.md"),
+                  os.path.join(PAPERS, f"{slug}.md")]
+    candidates += sorted(glob(os.path.join(PAPERS, "*", f"{slug}.md")))
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
+
 def _load_digest(slug):
     """Load a digest's frontmatter dict. Returns None if file missing or unparseable."""
-    path = f"{PAPERS}/{slug}.md"
-    if not os.path.exists(path):
+    path = _digest_path(slug)
+    if not path:
         return None
     try:
         with open(path) as f:
@@ -86,15 +161,42 @@ def _load_digest(slug):
         return None
 
 
-def _iter_digests():
-    """Yield (slug, frontmatter_dict) for every digest in the wiki."""
-    for fn in sorted(os.listdir(PAPERS)):
-        if not fn.endswith('.md') or fn.endswith('-notes.md') or fn == 'INDEX.md':
+def _iter_digests(root=None):
+    """Yield (slug, frontmatter_dict) for every digest in one directory.
+    Defaults to the active corpus — keeps seed-picking, centrality, and
+    canonical tallies from bleeding across research topics."""
+    root = root or corpus_dir()
+    if not os.path.isdir(root):
+        return
+    for fn in sorted(os.listdir(root)):
+        if not fn.endswith('.md') or fn.endswith('-notes.md') \
+                or fn in ('INDEX.md', 'corpora.md'):
             continue
         slug = fn[:-3]
-        fm = _load_digest(slug)
+        fm = _load_digest_at(os.path.join(root, fn))
         if fm:
             yield slug, fm
+
+
+def _load_digest_at(path):
+    """Frontmatter dict for an exact file path (no slug search)."""
+    try:
+        with open(path) as f:
+            content = f.read()
+        if '---' not in content:
+            return None
+        return yaml.safe_load(content.split('---')[1]) or None
+    except Exception:
+        return None
+
+
+def _iter_all_digests():
+    """Yield (slug, frontmatter) across the root AND every corpus.
+    Used for dedup — a paper digested in any corpus should never be
+    re-digested, whichever corpus is active."""
+    roots = [PAPERS] + [os.path.join(PAPERS, c) for c in _list_corpora()]
+    for root in roots:
+        yield from _iter_digests(root)
 
 
 def cmd_centrality(args):
@@ -122,9 +224,10 @@ def cmd_centrality(args):
 
 
 def cmd_wiki_keys(args):
-    """Print all multi-keys for all wiki digests (one key per line). For dedup checks."""
+    """Print all multi-keys for all wiki digests (one key per line). For dedup checks.
+    Deliberately global across every corpus — never re-digest a known paper."""
     seen = set()
-    for slug, fm in _iter_digests():
+    for slug, fm in _iter_all_digests():
         for k in make_keys({
             'arxiv_id': fm.get('arxiv_id'), 'doi': fm.get('doi'),
             'title': fm.get('title'), 'authors': fm.get('authors') or [],
@@ -168,8 +271,10 @@ def cmd_canonical_tally(args):
     min_count = int(args[0]) if args else 3
     top_n = int(args[1]) if len(args) > 1 else 20
 
+    # Already-digested check is global (any corpus); the tally itself is
+    # corpus-scoped so a young corpus isn't drowned out by a mature one.
     digested_keys = set()
-    for slug, fm in _iter_digests():
+    for slug, fm in _iter_all_digests():
         digested_keys |= make_keys({
             'arxiv_id': fm.get('arxiv_id'), 'doi': fm.get('doi'),
             'title': fm.get('title'), 'authors': fm.get('authors') or [],
@@ -205,8 +310,8 @@ def cmd_canonical_tally(args):
 
 
 def cmd_reconcile_index(args):
-    """Append INDEX rows for any digest missing from INDEX.md. Idempotent."""
-    INDEX_PATH = f"{PAPERS}/INDEX.md"
+    """Append INDEX rows for any digest missing from the corpus INDEX.md. Idempotent."""
+    INDEX_PATH = os.path.join(corpus_dir(), "INDEX.md")
     with open(INDEX_PATH) as f:
         idx = f.read()
     indexed = set(re.findall(r'\]\(([\w\-]+)\.md\)', idx))
@@ -282,16 +387,17 @@ def cmd_init_cycle(args):
             lens = a.split("=", 1)[1]
     topic_slug = re.sub(r'[^a-z0-9]+', '-', topic.lower()).strip('-')[:60]
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    existing = glob(f"{RESEARCH_CYCLE}/cycle-*-{topic_slug}-*")
+    existing = glob(f"{cycle_root()}/cycle-*-{topic_slug}-*")
     cycle_num = 1
     for d in existing:
         m = re.search(r'cycle-(\d+)-', d)
         if m:
             cycle_num = max(cycle_num, int(m.group(1)) + 1)
-    run_dir = f"{RESEARCH_CYCLE}/cycle-{cycle_num}-{topic_slug}-{date}"
+    run_dir = f"{cycle_root()}/cycle-{cycle_num}-{topic_slug}-{date}"
     os.makedirs(run_dir, exist_ok=True)
     state = {
         "cycle_num": cycle_num,
+        "corpus": CORPUS,
         "topic": topic,
         "topic_slug": topic_slug,
         "max_papers_per_mode": max_papers,
@@ -327,7 +433,7 @@ def cmd_topic_relevant_count(args):
         hits = []
     relevant = [
         h for h in hits
-        if h.get('file', '').startswith('memory/knowledge-sources/papers/')
+        if h.get('file', '').startswith(corpus_dir() + '/')
         and h.get('file', '').endswith('.md')
         and not h.get('file', '').endswith('-notes.md')
         and 'INDEX.md' not in h.get('file', '')
@@ -370,8 +476,17 @@ def cmd_pick_orbit_seed(args):
     print(json.dumps({"slug": best, "takeaway_length": best_len}, indent=2))
 
 
+def cmd_list_corpora(args):
+    """List corpora (subdirs of the papers root with an INDEX.md) as JSON."""
+    print(json.dumps({
+        "corpora": _list_corpora(),
+        "legacy_root_digests": _root_has_legacy_digests(),
+    }, indent=2))
+
+
 COMMANDS = {
     "centrality": cmd_centrality,
+    "list-corpora": cmd_list_corpora,
     "dedup-keys": cmd_dedup_keys,
     "wiki-keys": cmd_wiki_keys,
     "read-citations": cmd_read_citations,
@@ -387,8 +502,17 @@ COMMANDS = {
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] not in COMMANDS:
+    _explicit_corpus = None
+    _argv = []
+    for _a in sys.argv[1:]:
+        if _a.startswith("--corpus="):
+            _explicit_corpus = _a.split("=", 1)[1]
+        else:
+            _argv.append(_a)
+    if not _argv or _argv[0] not in COMMANDS:
         print(__doc__, file=sys.stderr)
         print(f"\nKnown commands: {sorted(COMMANDS.keys())}", file=sys.stderr)
         sys.exit(2)
-    COMMANDS[sys.argv[1]](sys.argv[2:])
+    if _argv[0] != "list-corpora":
+        CORPUS = _resolve_corpus(_explicit_corpus)
+    COMMANDS[_argv[0]](_argv[1:])

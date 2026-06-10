@@ -32,11 +32,21 @@ import socket
 import string
 import sys
 from datetime import datetime, timezone
+from glob import glob
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 
 
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+def _find_repo_root():
+    """Prefer the working directory (how the skills invoke this); fall back to
+    the script's parent dir (direct invocation from elsewhere)."""
+    cwd = os.getcwd()
+    if os.path.isdir(os.path.join(cwd, "memory", "knowledge-sources", "papers")):
+        return cwd
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+REPO_ROOT = _find_repo_root()
 PAPERS_DIR = os.path.join(REPO_ROOT, "memory", "knowledge-sources", "papers")
 THESES_DIR = os.path.join(REPO_ROOT, "experiences", "theses")
 
@@ -71,16 +81,30 @@ NOTES_HEADER_TMPL = (
 )
 
 
-def notes_path_for(slug: str) -> str:
+def digest_path_for(slug: str):
+    """Find a digest by slug — papers root first (legacy flat layout), then
+    corpus subdirectories. Slugs are globally unique, so first hit wins."""
     if not SLUG_RE.match(slug):
         raise ValueError(f"invalid slug: {slug!r}")
-    return os.path.join(PAPERS_DIR, f"{slug}-notes.md")
+    candidates = [os.path.join(PAPERS_DIR, f"{slug}.md")]
+    candidates += sorted(glob(os.path.join(PAPERS_DIR, "*", f"{slug}.md")))
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def notes_path_for(slug: str) -> str:
+    """Sidecar lives next to its digest (per-corpus); papers root if no digest yet."""
+    digest = digest_path_for(slug)  # also validates the slug
+    base = os.path.dirname(digest) if digest else PAPERS_DIR
+    return os.path.join(base, f"{slug}-notes.md")
 
 
 def digest_title(slug: str) -> str:
     """Best-effort lookup of the paper title from the digest's frontmatter."""
-    digest_path = os.path.join(PAPERS_DIR, f"{slug}.md")
-    if not os.path.exists(digest_path):
+    digest_path = digest_path_for(slug)
+    if not digest_path:
         return slug
     try:
         with open(digest_path, "r", encoding="utf-8") as f:
@@ -157,6 +181,7 @@ def ensure_notes_file(slug: str) -> None:
     title = digest_title(slug)
     content = NOTES_HEADER_TMPL.format(slug=slug, title=title)
     content += "_No notes yet. Highlight text in the digest to add one._\n"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 

@@ -5,7 +5,7 @@ description: Verify a thesis (or all open theses) against the open literature. G
 
 # /verify-thesis — Falsifiable-claim verifier
 
-The user invoked `/verify-thesis <slug>` or `/verify-thesis --all-open` (or `--status=<value>`), with optional flags: `--max-batch=N`, `--max-sources=N`, `--gen-queries=N`, `--no-experiment`, `--force`, `--dry-run`.
+The user invoked `/verify-thesis <slug>` or `/verify-thesis --all-open` (or `--status=<value>`), with optional flags: `--corpus=<slug>`, `--max-batch=N`, `--max-sources=N`, `--gen-queries=N`, `--no-experiment`, `--force`, `--dry-run`.
 
 The full skill methodology lives at `skills/verify-thesis/SKILL.md`. Read that file in full and follow it end-to-end. The sub-agent prompts live at `skills/verify-thesis/prompts/`.
 
@@ -15,6 +15,7 @@ The full skill methodology lives at `skills/verify-thesis/SKILL.md`. Read that f
 - `--status=<value>` — sweep theses matching a specific status (e.g., `--status=stale-pending-review`)
 
 **Optional flags:**
+- `--corpus=<slug>` — research corpus whose theses to verify (sweeps never cross corpora)
 - `--max-batch=5` — cap on theses processed per run (batch modes only). Default 5.
 - `--max-sources=12` — max candidate sources per thesis
 - `--gen-queries=4` — adversarial queries to generate per thesis

@@ -39,6 +39,7 @@ When invoked at top level (the normal user path), this skill dispatches `/digest
 | `--min-relevance=0.5` | Float 0-1. Candidates scoring below this don't enter the frontier. Default: 0.5. Ignored for `--canonical`. |
 | `--min-canonical-count=3` | Used only with `--canonical`. Minimum number of distinct already-digested papers that must cite a candidate for it to qualify. Default: 3. |
 | `--lens=<slug>` | Lens passed through to `/digest-paper` for every paper visited. Default: `generic`. |
+| `--corpus=<slug>` | Research corpus to walk within. Resolution rule and new-corpus creation: see `skills/digest-paper/SKILL.md` Step 0. All wiki reads (seed lookup, canonical tally, dedup-frontier vs wiki, related-digest scoring) and all digests written are scoped to `memory/knowledge-sources/papers/<corpus>/`; only the already-digested-anywhere dedup check is global. |
 | `--dry-run` | Compute the frontier and rank candidates, but DO NOT fire any `/digest-paper` agents and DO NOT write to the wiki. Output a preview table to stdout so the user can sanity-check what would be digested before committing to the run. ~10-30 seconds. |
 
 ## Mutually exclusive modes
@@ -52,12 +53,15 @@ Exactly one of `--broad`, `--deep`, `--canonical`, `--orbit` may be set. If none
 ```
 1. Validate args: exactly one of (--broad, --deep, --canonical). Topic required
    unless --canonical (which uses the wiki as its topic by definition).
-2. If seed is a slug → check memory/knowledge-sources/papers/<slug>.md exists.
+   Resolve the corpus (digest-paper Step 0 rule: --corpus= > FLOWSCOUT_CORPUS >
+   sole corpus > ask). All paper paths below are papers/<corpus>/.
+2. If seed is a slug → check memory/knowledge-sources/papers/<corpus>/<slug>.md exists.
    If seed is a URL → no preflight check (the digest step will handle it).
-3. Create run directory: experiences/citation-walk/<seed-slug-or-canonical>-<YYYY-MM-DD>/
+3. Create run directory: experiences/citation-walk/<corpus>/<seed-slug-or-canonical>-<YYYY-MM-DD>/
 4. Initialize state.json:
    {
      "mode": "broad|deep|canonical",
+     "corpus": "<corpus>",
      "topic": "...",
      "lens": "...",
      "max_papers": 15,
@@ -100,12 +104,12 @@ Exactly one of `--broad`, `--deep`, `--canonical`, `--orbit` may be set. If none
 
 ```
 1. If seed is a URL:
-   - Call /digest-paper <url> --lens=<lens> via Agent tool
+   - Call /digest-paper <url> --lens=<lens> --corpus=<corpus> via Agent tool
    - On completion, get back the slug + the digest's frontmatter.citations[]
    - Add slug to state.digested, budget_used += 1
    - Add normalized key to state.seen
 2. If seed is a slug:
-   - Read memory/knowledge-sources/papers/<slug>.md
+   - Read memory/knowledge-sources/papers/<corpus>/<slug>.md
    - Extract frontmatter.citations[]
    - Add slug to state.seen (but NOT to state.digested — it was pre-existing)
 3. For each citation in the seed's citations[]:
@@ -119,7 +123,9 @@ Exactly one of `--broad`, `--deep`, `--canonical`, `--orbit` may be set. If none
 **Mode: `--canonical`**
 
 ```
-1. Read all existing memory/knowledge-sources/papers/*.md (skip INDEX.md, viewer.html, figures/)
+1. Read all existing memory/knowledge-sources/papers/<corpus>/*.md (skip INDEX.md, viewer.html, figures/)
+   — canonical tallies are corpus-scoped so another corpus's foundational papers
+   can't dominate this one's. The already-digested skip in 2. is global (all corpora).
 2. For each existing digest:
    - Parse frontmatter.citations[]
    - For each citation:
@@ -246,7 +252,7 @@ Used in `--broad` and `--deep` modes (skipped for `--canonical`).
 Run once at start of each batch:
 ```bash
 ./vendor/qmd/bin/qmd vsearch "<state.topic>" --json -n 100 \
-  | jq '[.[] | select(.file | startswith("memory/knowledge-sources/papers/"))
+  | jq '[.[] | select(.file | startswith("memory/knowledge-sources/papers/<corpus>/"))
               | select(.file | endswith(".md"))
               | {slug: (.file | sub(".*/"; "") | sub(".md$"; "")), score}]'
 ```
@@ -320,7 +326,7 @@ while frontier non-empty AND budget_used < max_papers:
 
     # Dispatch parallel digests
     Send ONE message with batch_size Agent calls, each running:
-      "Execute /digest-paper for <url> with --lens=<lens>. Follow
+      "Execute /digest-paper for <url> with --lens=<lens> --corpus=<corpus>. Follow
        skills/digest-paper/SKILL.md exactly. After completion, report:
          slug, frontmatter.citations[], hallucination_severity."
 
@@ -374,7 +380,7 @@ Same shape as `--canonical` — the frontier was populated once in Step 2, the l
 ```
 while frontier non-empty AND budget_used < max_papers:
     batch = pop_top_n(frontier, 5)  # by (patterns_count, max_score), descending
-    Dispatch parallel digests via /digest-paper, passing through --lens=<seed-lens>
+    Dispatch parallel digests via /digest-paper, passing through --lens=<seed-lens> --corpus=<corpus>
     For each result:
         append slug to state.digested
         budget_used += 1
@@ -405,18 +411,18 @@ Write to `experiences/citation-walk/<run-dir>/meta-digest.md`.
 
 ### Step 6.5 — Reconcile INDEX.md (post-run)
 
-Some sub-agents may have skipped their `INDEX.md` append for concurrency safety (the lock might have timed out, or the agent self-aborted the row write). Before declaring the run complete, scan every slug in `state.digested` and ensure each has a row in `memory/knowledge-sources/papers/INDEX.md`. Add any missing rows.
+Some sub-agents may have skipped their `INDEX.md` append for concurrency safety (the lock might have timed out, or the agent self-aborted the row write). Before declaring the run complete, scan every slug in `state.digested` and ensure each has a row in `memory/knowledge-sources/papers/<corpus>/INDEX.md`. Add any missing rows. (`python3 scripts/research-cycle-helpers.py reconcile-index --corpus=<corpus>` does exactly this; the inline equivalent:)
 
 ```python
 import re, yaml
-INDEX = "memory/knowledge-sources/papers/INDEX.md"
+INDEX = "memory/knowledge-sources/papers/<corpus>/INDEX.md"
 with open(INDEX) as f: idx = f.read()
 existing_slugs = set(re.findall(r'\]\(([\w\-]+)\.md\)', idx))
 for slug in state["digested"]:
     if slug in existing_slugs:
         continue
     # Read the digest's frontmatter to construct the row
-    with open(f"memory/knowledge-sources/papers/{slug}.md") as f:
+    with open(f"memory/knowledge-sources/papers/<corpus>/{slug}.md") as f:
         meta = yaml.safe_load(f.read().split("---")[1])
     row = f"| {meta['digested_date']} | [{meta['title']}]({slug}.md) | " \
           f"{meta['authors'][0].split(',')[0]} et al. | {meta['year']} | " \
@@ -471,7 +477,7 @@ Each `/digest-paper` call from within `/citation-walk` happens via Agent tool. T
 You are executing the /digest-paper skill defined in skills/digest-paper/SKILL.md
 on the paper at <URL>.
 
-Follow that SKILL.md end-to-end. Use --lens=<LENS>.
+Follow that SKILL.md end-to-end. Use --lens=<LENS> --corpus=<CORPUS>.
 
 When complete, report back ONLY:
   - slug: <kebab-slug-of-digest>
@@ -490,7 +496,7 @@ After running the skill, confirm:
 - [ ] `experiences/citation-walk/<run-dir>/state.json` exists with `status: "completed"`
 - [ ] `experiences/citation-walk/<run-dir>/meta-digest.md` exists
 - [ ] `experiences/citation-walk/<run-dir>/log.md` exists with batch-by-batch progress
-- [ ] Every slug in `state.digested` corresponds to a real file under `memory/knowledge-sources/papers/`
+- [ ] Every slug in `state.digested` corresponds to a real file under `memory/knowledge-sources/papers/<corpus>/`
 - [ ] `qmd search "<topic-fragment>"` returns the new digests + the meta-digest
 - [ ] If mode was `--canonical`, confirm every digested paper was indeed cited by ≥ min_canonical_count distinct pre-existing digests
 
