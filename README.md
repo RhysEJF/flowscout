@@ -84,6 +84,11 @@ Once installed, all five commands are available as Claude Code slash commands.
 /verify-thesis --all-open
 ```
 
+**Define a reading lens** (before you point it at a new field):
+```
+/lens new "I build synthetic-user-testing products and care about when simulated users predict real behaviour"
+```
+
 ## The five commands
 
 | Command | What it does | Reads | Writes |
@@ -93,6 +98,8 @@ Once installed, all five commands are available as Claude Code slash commands.
 | `/research-cycle` | Chains all four citation-walk modes in sequence on a single topic, plus a longitudinal meta-digest that compounds across runs. Designed to be wrapped by `/loop`. | The wiki + a topic | A per-cycle synthesis |
 | `/flow-frontier` | Mines cross-paper theses across five gap-types: convergence, unstated-assumption, mechanism-gap, edge-of-consensus, direct contradiction. Emits falsifiable theses. | The wiki | `experiences/theses/<slug>.md` |
 | `/verify-thesis` | Generates adversarial search queries per thesis, runs them through Exa + WebSearch, scores candidates as supports/contradicts/qualifies/irrelevant, synthesises a verdict, drafts an experiment if the thesis stays open. | A thesis + the open literature | Updated thesis file with verdict |
+
+Plus one helper: **`/lens`** — list, inspect, or create the **reading lens** a paper is digested through (a persona like "synthetic-user-product-builder" that steers what each digest emphasises). `/lens new` creates one from a description alone — no paper URL required. Pair a fresh lens with a fresh `--corpus` when you point FlowScout at a new field.
 
 ## Multiple corpora — researching more than one field
 

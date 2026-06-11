@@ -43,7 +43,7 @@ git clone --depth 1 --quiet https://github.com/RhysEJF/flowscout.git "$TMPDIR/fl
 # Step 3: install commands
 echo ""
 echo "Installing slash commands..."
-for cmd in digest-paper citation-walk research-cycle flow-frontier verify-thesis; do
+for cmd in digest-paper citation-walk research-cycle flow-frontier verify-thesis lens; do
   src="$TMPDIR/flowscout/commands/$cmd.md"
   dst=".claude/commands/$cmd.md"
   if [[ -f "$dst" && "$FORCE" != true ]]; then

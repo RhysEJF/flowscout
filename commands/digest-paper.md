@@ -12,9 +12,9 @@ The full skill methodology lives at `skills/digest-paper/SKILL.md`. Read that fi
 **Required argument:** the paper URL.
 **Optional flags:**
 - `--corpus=<slug>` — which research corpus (subdirectory of the papers wiki) to write into; resolution rule in the SKILL.md Step 0
-- `--lens=<slug>` — use an existing lens (see `skills/digest-paper/lenses/`)
+- `--lens=<slug>` — use an existing lens (see `skills/digest-paper/lenses/`, or `/lens` to list)
 - `--lens` (no value) — list available lenses and let the user pick
-- `--new-lens` — interview the user to create a new lens, save it, then use it
+- `--new-lens` — create a lens inline (same flow as `/lens new`), then digest with it. To create a lens *without* a paper in hand, use the standalone `/lens new` command first.
 - (no flag) — default to the `generic` lens
 
 If the user did not include a URL, ask for one before proceeding.

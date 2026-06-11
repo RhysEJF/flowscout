@@ -49,17 +49,16 @@ Every path below written as `papers/<corpus>/...` means `memory/knowledge-source
 
 Determine which lens content to inject into the prompt templates as `{{LENS}}`.
 
+Lenses can also be created ahead of time with the standalone `/lens new`
+command (no paper required) — see `commands/lens.md`. `--new-lens` here just
+runs that same create flow inline, then proceeds straight to digesting.
+
 ```
 if --new-lens:
-    Ask user: "What's the lens? Describe in 1-2 sentences: who are you when
-              reading this paper, and what kind of takeaways matter?"
-    Take their answer, propose:
-      - A slug (auto-derived from the description, e.g. "venture-builder")
-      - A ~150-word full lens text (expand their sentence to match the
-        format of lenses/generic.md — declarative, second-person "you are
-        reading this paper as...")
-    Show both, ask user to approve / edit / rename.
-    On approval, write to skills/digest-paper/lenses/<slug>.md.
+    Run the `/lens new` create flow (commands/lens.md): ask "who are you when
+    reading this paper, and what takeaways matter?", propose a slug + ~150-word
+    second-person lens matching lenses/generic.md, approve/edit, then write to
+    skills/digest-paper/lenses/<slug>.md.
     Use the new content as {{LENS}}.
 
 elif --lens with no value:

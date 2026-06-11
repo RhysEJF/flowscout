@@ -43,7 +43,7 @@ git clone --depth 1 https://github.com/RhysEJF/flowscout.git "$TMPDIR/flowscout"
 Copy the five `.md` slash command files into `.claude/commands/`. Warn if any file already exists; do not overwrite without confirmation.
 
 ```bash
-for cmd in digest-paper citation-walk research-cycle flow-frontier verify-thesis; do
+for cmd in digest-paper citation-walk research-cycle flow-frontier verify-thesis lens; do
   if [ -f ".claude/commands/$cmd.md" ]; then
     echo "Already exists: .claude/commands/$cmd.md (skipping; remove first to reinstall)"
   else
@@ -142,6 +142,7 @@ rm .claude/commands/citation-walk.md
 rm .claude/commands/research-cycle.md
 rm .claude/commands/flow-frontier.md
 rm .claude/commands/verify-thesis.md
+rm .claude/commands/lens.md
 rm -rf skills/digest-paper skills/citation-walk skills/research-cycle skills/flow-frontier skills/verify-thesis
 rm -f scripts/with-lock.py scripts/papers-server.py scripts/research-cycle-helpers.py
 ```
