@@ -213,7 +213,7 @@ This mode does NOT walk the citation graph. It generates mutated key-takeaways f
      score = min(0.99, 0.6 + 0.1 * len(patterns)),
      source_citation = {patterns: [...], mutations: {pattern_idx: query}}
 
-9. Skip Step 3 (Haiku relevance scoring) for --orbit. Exa's semantic
+9. Skip Step 3 (Sonnet relevance scoring) for --orbit. Exa's semantic
    reranking + cross-pattern frequency IS the signal. If --topic was
    provided, optionally re-rank candidates within each (patterns, max_score)
    tier by topic-similarity — but do NOT drop below max_papers.
@@ -259,23 +259,26 @@ Run once at start of each batch:
 
 This gives you a relevance score (cosine similarity) for every digested paper relative to your topic. Cache the result; reuse for the batch.
 
-**For NEW candidates (not yet digested)** — use Haiku-judge:
+**For NEW candidates (not yet digested)** — use Sonnet-judge (Sonnet 5, pinned; see the model-pin note below):
 
 ```
 For each candidate batch (up to 20 candidates per Agent call):
   Launch Agent(
     subagent_type="general-purpose",
+    model="sonnet",
     description="relevance scoring",
     prompt=<see prompts/score_relevance.md, with {{TOPIC}} and {{CANDIDATES}} filled in>
   )
   Parse JSON response: [{"key": "...", "score": 0.0-1.0}, ...]
 ```
 
-Why Haiku-judge and not QMD vectors for these: QMD's embedding model (`embeddinggemma-300M` by default, configurable via `QMD_EMBED_MODEL`) runs in node-llama-cpp and is not exposed for ad-hoc text→vector conversion outside the index. Adding `sentence-transformers` as a Python dep to bridge this would be a ~1GB install. Haiku-judge:
+Why Sonnet-judge and not QMD vectors for these: QMD's embedding model (`embeddinggemma-300M` by default, configurable via `QMD_EMBED_MODEL`) runs in node-llama-cpp and is not exposed for ad-hoc text→vector conversion outside the index. Adding `sentence-transformers` as a Python dep to bridge this would be a ~1GB install. Sonnet-judge:
 - Already set up (uses the same Claude API everything else uses)
-- ~$0.0005 per scoring decision
-- Higher quality than title-only vector similarity (Haiku understands paper context, knows what "PERSONA" means in a 2024 AI paper, etc.)
-- Negligible cost: max 15 papers × ~20 candidates × $0.0005 = $0.15 per max-budget run
+- ~$0.0015 per scoring decision (measured 2026-09-17; includes the Claude Code system-prompt overhead every subagent call carries)
+- Higher quality than title-only vector similarity (Sonnet understands paper context, knows what "PERSONA" means in a 2024 AI paper, etc.)
+- Negligible cost: max 15 papers × ~20 candidates × $0.0015 = $0.45 per max-budget run
+
+**Model pin (2026-09-17):** `model="sonnet"` is deliberate. A four-model bakeoff (Haiku 4.5, Sonnet 5, Opus 5, Fable 5.1; the same 30 candidates and prompt replayed three times per model) found Sonnet 5 the most accurate judge against reference labels and the cheapest per call. Haiku 4.5 ran with extended thinking under Claude Code (about 5x slower, same cost) and was noisier on borderline papers. Leaving `model` unset inherits the parent session's model, which on a Fable session costs about 5x more for a slightly stricter judge. Do not remove or change the pin without re-running the bakeoff.
 
 ### Step 3.5 — Resolve candidate URL when missing
 
@@ -295,7 +298,7 @@ For DOI-only citations: try `https://doi.org/<doi>` — many resolve to publishe
 
 ### Step 4 — Lightweight metadata fetch (title + abstract) for new candidates
 
-Before scoring, we need the abstract to give Haiku-judge a strong signal. Fetch via:
+Before scoring, we need the abstract to give Sonnet-judge a strong signal. Fetch via:
 
 ```
 For arxiv candidates:

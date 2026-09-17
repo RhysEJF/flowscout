@@ -105,8 +105,8 @@ for r in exa_results:
     ):
         fetchable.append(r)
 
-# 3. Score top 8 with Haiku-judge for relevance (cheap)
-scored = haiku_judge_relevance(fetchable[:8], state.topic)
+# 3. Score top 8 with Sonnet-judge for relevance (cheap; model pinned, see citation-walk Step 3 model-pin note)
+scored = sonnet_judge_relevance(fetchable[:8], state.topic)
 scored.sort(key=lambda x: -x['score'])
 
 # 4. Take top 3 with score >= 0.7 (if fewer, the topic may be too narrow — log and bail)
@@ -212,12 +212,12 @@ Then inline Python (orchestrator runs via Bash heredoc): for each candidate in `
 python3 scripts/research-cycle-helpers.py fetch-arxiv-batch <id1> <id2> ... > /tmp/rc-abstracts.json
 ```
 
-**Score candidates with a single Haiku-judge sub-agent dispatch** (one Agent call per seed):
+**Score candidates with a single Sonnet-judge sub-agent dispatch** (one Agent call per seed):
 
 ```
 Agent(
   subagent_type="general-purpose",
-  model="haiku",
+  model="sonnet",   # pinned 2026-09-17 after the judge bakeoff; do not change without re-running it
   prompt="Score candidates against topic '<topic>' using
           skills/citation-walk/prompts/score_relevance.md template.
           Candidates in /tmp/rc-cands-with-abstracts-<seed>.json.
@@ -298,7 +298,7 @@ python3 scripts/research-cycle-helpers.py pick-deep-seed <prior-seed-1> <prior-s
 For each of `max_papers` hops (default 5):
 
 1. Read current seed's citations + dedup against wiki (same inline pattern as Step 3)
-2. Dispatch single Haiku-judge Agent to score
+2. Dispatch single Sonnet-judge Agent to score
 3. Pick top-1
 4. Resolve URL
 5. Dispatch ONE `/digest-paper` sub-agent at top level (fresh context, ~5-8 min)
